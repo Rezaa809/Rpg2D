@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>High-Bit Web RPG Engine</title>
+    <style>
+        /* CSS Reset & Canvas Setup */
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body { overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* Overlays */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(17, 17, 17, 0.9); color: white; z-index: 1000;
+        }
+
+        /* Landing Page */
+        #landingPage h1 { font-size: 3rem; margin-bottom: 20px; color: #f1c40f; text-shadow: 2px 2px 0 #000; }
+        .btn { padding: 15px 30px; font-size: 20px; font-weight: bold; background: #3498db; border: none; border-radius: 8px; color: white; cursor: pointer; transition: 0.2s;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .btn:active { transform: scale(0.95); }
+
+        /* Loading */
+        #loader { z-index: 999; font-size: 24px; font-weight: bold; transition: opacity 0.5s; background: #111; }
+
+        /* Shop UI */
+        #shopUI { display: none; background: rgba(0,0,0,0.85); z-index: 900; }
+        .shop-container { background: #222; padding: 20px; border-radius: 10px; border: 2px solid #f1c40f; text-align: center; max-width: 90%; width: 400px; }
+        .shop-container h2 { color: #f1c40f; margin-bottom: 15px; }
+        .shop-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 10px; background: #333; border-radius: 5px; }
+        .shop-item button { background: #2ecc71; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .shop-item button:disabled { background: #7f8c8d; cursor: not-allowed; }
+        #closeShop { margin-top: 15px; background: #e74c3c; }
+
+        /* Death Screen */
+        #deathScreen { display: none; z-index: 1000; background: rgba(150, 0, 0, 0.8); }
+        #deathScreen h1 { color: #fff; font-size: 3rem; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="landingPage" class="overlay">
+        <h1>High-Bit RPG</h1>
+        <p id="loadingText" style="font-size: 20px; color: #f1c40f;">Memuat Game... <span id="timerText">5</span>s</p>
+        <p style="margin-top: 30px; font-size: 16px; color: #888;">Created by: <span style="color: #fff; font-weight: bold;">REKA</span></p>
+    </div>
+
+    <div id="loader" class="overlay" style="display:none;">Loading Engine...</div>
+
+    <div id="deathScreen" class="overlay">
+        <h1>ANDA TEWAS!</h1>
+        <p style="font-size: 20px; margin-bottom: 20px;">Respawn dalam: <span id="respawnTimer">60</span> detik</p>
+        <button id="skipRespawnBtn" class="btn" style="background: #f1c40f; color: #000;">Skip Respawn (<span id="respawnCost">0</span> Koin)</button>
+    </div>
+
+    <div id="shopUI" class="overlay">
+        <div class="shop-container">
+            <h2>NPC Shop</h2>
+            <p style="margin-bottom: 10px; color: #f1c40f;">Koin Anda: <span id="shopCoins">0</span></p>
+            <div class="shop-item"><span>+Power/Damage (50 Koin)</span> <button onclick="buyItem('damage', 50)">Beli</button></div>
+            <div class="shop-item"><span>+Range Senjata (50 Koin)</span> <button onclick="buyItem('range', 50)">Beli</button></div>
+            <div class="shop-item"><span>HP Full (30 Koin)</span> <button onclick="buyItem('hpfull', 30)">Beli</button></div>
+            <div class="shop-item"><span>+20 Max HP (100 Koin)</span> <button onclick="buyItem('maxhp', 100)">Beli</button></div>
+            <div class="shop-item"><span>Skin Emas (500 Koin)</span> <button id="btnSkin" onclick="buyItem('skin', 500)">Beli</button></div>
+            <div class="shop-item"><span>Efek Trail (300 Koin)</span> <button id="btnTrail" onclick="buyItem('trail', 300)">Beli</button></div>
+            <button id="closeShop" class="btn" onclick="closeShopUI()">Tutup</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * ==========================================
+ * KONFIGURASI SOUND EFFECTS (FITUR 11)
+ * ==========================================
+ */
+const SOUND_LINKS = {
+    bgm: "",    
+    sword: "",  
+    hit: "",    
+    orb: ""     
+};
+
+/**
+ * ==========================================
+ * GAME CONSTANTS & UTILS
+ * ==========================================
+ */
+const WORLD_W = 4000;
+const WORLD_H = 4000;
+const TILE_SIZE = 64;
+
+const COLORS = {
+    grass: ['#4a8c56', '#5ba368', '#3e7a48'],
+    ground: '#3a6b42',
+    player: '#3498db',
+    playerSkin: '#f1c40f', 
+    playerDark: '#2980b9',
+    enemyNormal: '#e74c3c', 
+    enemyHard: '#9b59b6',   
+    enemyAgressive: '#8e44ad', 
+    npcQuest: '#f1c40f',
+    npcShop: '#2ecc71',
+    npcGacha: '#e67e22',
+    treeTrunk: '#795548',
+    treeLeaves: '#2e7d32',
+    uiBg: 'rgba(0, 0, 0, 0.6)',
+    text: '#ffffff'
+};
+
+const Utils = {
+    random: (min, max) => Math.random() * (max - min) + min,
+    randomInt: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
+    clamp: (val, min, max) => Math.max(min, Math.min(max, val)),
+    getDist: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
+    checkCircleCol: (c1, c2) => Utils.getDist(c1.x, c1.y, c2.x, c2.y) < (c1.radius + c2.radius)
+};
+
+const AudioHelper = {
+    bgm: new Audio(SOUND_LINKS.bgm),
+    play(type) {
+        if (!SOUND_LINKS[type]) return;
+        let audio = new Audio(SOUND_LINKS[type]);
+        audio.volume = 0.3; 
+        audio.play().catch(e => console.log("Audio play prevented"));
+    },
+    startBGM() {
+        if (!SOUND_LINKS.bgm) return;
+        this.bgm.loop = true;
+        this.bgm.volume = 0.2;
+        this.bgm.play().catch(e => console.log("BGM play prevented"));
+    }
+};
+
+/**
+ * ==========================================
+ * INPUT HANDLER (Keyboard & Mobile Touch)
+ * ==========================================
+ */
+class InputHandler {
+    constructor() {
+        this.keys = {};
+        this.joystick = { active: false, x: 0, y: 0, originX: 0, originY: 0, dx: 0, dy: 0, id: null };
+        this.actionBtn = { active: false, pressed: false, x: 0, y: 0, radius: 40, id: null };
+        this.isMobile = false;
+        window.addEventListener('keydown', e => this.keys[e.code] = true);
+        window.addEventListener('keyup', e => {
+            this.keys[e.code] = false;
+            if(e.code === 'Space') this.actionBtn.pressed = true;
+        });
+        window.addEventListener('touchstart', e => this.handleTouch(e, true), {passive: false});
+        window.addEventListener('touchmove', e => this.handleTouch(e, false), {passive: false});
+        window.addEventListener('touchend', e => this.handleTouchEnd(e));
+        window.addEventListener('resize', () => this.resizeUI());
+        this.resizeUI();
+    }
+
+    resizeUI() {
+        this.isMobile = ('ontouchstart' in window) || window.innerWidth < 800;
+        this.actionBtn.x = window.innerWidth - 80;
+        this.actionBtn.y = window.innerHeight - 80;
+    }
+
+    handleTouch(e, isStart) {
+        if(document.getElementById('shopUI').style.display === 'flex' || document.getElementById('deathScreen').style.display === 'flex') return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let t = e.changedTouches[i];
+            if (t.clientX < window.innerWidth / 2) {
+                if (isStart && !this.joystick.active) {
+                    this.joystick.active = true;
+                    this.joystick.id = t.identifier;
+                    this.joystick.originX = t.clientX;
+                    this.joystick.originY = t.clientY;
+                    this.joystick.x = t.clientX;
+                    this.joystick.y = t.clientY;
+                } else if (this.joystick.id === t.identifier) {
+                    this.joystick.x = t.clientX;
+                    this.joystick.y = t.clientY;
+                    const maxDist = 50;
+                    let dx = this.joystick.x - this.joystick.originX;
+                    let dy = this.joystick.y - this.joystick.originY;
+                    let dist = Math.hypot(dx, dy);
+                    
+                    if (dist > maxDist) {
+                        const angle = Math.atan2(dy, dx);
+                        dx = Math.cos(angle) * maxDist;
+                        dy = Math.sin(angle) * maxDist;
+                    }
+                    this.joystick.dx = dx / maxDist;
+                    this.joystick.dy = dy / maxDist;
+                }
+            } 
+            else {
+                let d = Utils.getDist(t.clientX, t.clientY, this.actionBtn.x, this.actionBtn.y);
+                if (d < this.actionBtn.radius * 1.5) {
+                    if (isStart) {
+                        this.actionBtn.active = true;
+                        this.actionBtn.id = t.identifier;
+                        this.actionBtn.pressed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    handleTouchEnd(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let t = e.changedTouches[i];
+            if (t.identifier === this.joystick.id) {
+                this.joystick.active = false;
+                this.joystick.dx = 0;
+                this.joystick.dy = 0;
+                this.joystick.id = null;
+            }
+            if (t.identifier === this.actionBtn.id) {
+                this.actionBtn.active = false;
+                this.actionBtn.id = null;
+            }
+        }
+    }
+
+    getMovement() {
+        let x = 0, y = 0;
+        if (this.keys['KeyW'] || this.keys['ArrowUp']) y = -1;
+        if (this.keys['KeyS'] || this.keys['ArrowDown']) y = 1;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) x = -1;
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) x = 1;
+        if (this.joystick.active) {
+            x = this.joystick.dx;
+            y = this.joystick.dy;
+        }
+        
+        if (!this.joystick.active && (x !== 0 || y !== 0)) {
+            let len = Math.hypot(x, y);
+            x /= len;
+            y /= len;
+        }
+        return { x, y };
+    }
+
+    checkAction() {
+        if (this.actionBtn.pressed) {
+            this.actionBtn.pressed = false;
+            return true;
+        }
+        return false;
+    }
+}
+
+/**
+ * ==========================================
+ * CLASSES: ENTITIES
+ * ==========================================
+ */
+class Camera {
+    constructor(width, height) {
+        this.x = 0;
+        this.y = 0;
+        this.width = width;
+        this.height = height;
+    }
+    follow(target) {
+        let targetX = target.x - this.width / 2;
+        let targetY = target.y - this.height / 2;
+        targetX = Utils.clamp(targetX, 0, WORLD_W - this.width);
+        targetY = Utils.clamp(targetY, 0, WORLD_H - this.height);
+        this.x += (targetX - this.x) * 0.1;
+        this.y += (targetY - this.y) * 0.1;
+    }
+}
+
+class Particle {
+    constructor(x, y, type, value = null) {
+        this.x = x;
+        this.y = y;
+        this.type = type; 
+        this.life = 1.0;
+        this.value = value;
+        this.vy = -1;
+        this.vx = Utils.random(-1, 1);
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= 0.02;
+    }
+    draw(ctx, camX, camY) {
+        ctx.globalAlpha = this.life;
+        if (this.type === 'damage') {
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(this.value, this.x - camX, this.y - camY);
+        } else if (this.type === 'heal') {
+            ctx.fillStyle = '#2ecc71';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(this.value, this.x - camX, this.y - camY);
+        } else if (this.type === 'dust') {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x - camX, this.y - camY, 3 * this.life, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+}
+
+class Entity {
+    constructor(x, y, radius, speed) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.speed = speed;
+        this.color = '#fff';
+        this.isDead = false;
+    }
+    drawShadow(ctx, camX, camY) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(this.x - camX, this.y + this.radius/2 - camY, this.radius, this.radius/2, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 16, 5);
+        this.hp = 100;
+        this.maxHp = 100;
+        this.level = 1;
+        this.xp = 0;
+        this.maxXp = 50;
+        this.attackRange = 50;
+        this.attackCooldown = 0;
+        this.facing = 0;
+        
+        this.coins = 0;
+        this.damageBonus = 0;
+        this.ownsSkin = false;
+        this.ownsTrail = false;
+        this.useSkin = false;
+        this.useTrail = false;
+        
+        this.idleFrames = 0;
+        this.deathTimer = 0;
+    }
+
+    loadData() {
+        let data = localStorage.getItem('rpg_save');
+        if (data) {
+            data = JSON.parse(data);
+            this.level = data.level || 1;
+            this.xp = data.xp || 0;
+            this.maxXp = data.maxXp || 50;
+            this.maxHp = data.maxHp || 100;
+            this.hp = data.hp || this.maxHp;
+            this.coins = data.coins || 0;
+            this.attackRange = data.attackRange || 50;
+            this.damageBonus = data.damageBonus || 0;
+            this.ownsSkin = data.ownsSkin || false;
+            this.ownsTrail = data.ownsTrail || false;
+            this.useSkin = data.useSkin || false;
+            this.useTrail = data.useTrail || false;
+        }
+    }
+
+    saveData() {
+        localStorage.setItem('rpg_save', JSON.stringify({
+            level: this.level, xp: this.xp, maxXp: this.maxXp,
+            maxHp: this.maxHp, hp: this.hp, coins: this.coins,
+            attackRange: this.attackRange, damageBonus: this.damageBonus,
+            ownsSkin: this.ownsSkin, ownsTrail: this.ownsTrail,
+            useSkin: this.useSkin, useTrail: this.useTrail
+        }));
+    }
+
+    update(input, world) {
+        if (this.isDead) return;
+        const move = input.getMovement();
+        if (move.x !== 0 || move.y !== 0) {
+            this.x += move.x * this.speed;
+            this.y += move.y * this.speed;
+            this.facing = Math.atan2(move.y, move.x);
+            this.idleFrames = 0;
+            
+            if (this.useTrail && Math.random() < 0.3) {
+                world.addParticle(new Particle(this.x, this.y + 10, 'dust'));
+            }
+        } else {
+            this.idleFrames++;
+            if (this.idleFrames > 300 && this.hp < this.maxHp) {
+                this.hp = Math.min(this.maxHp, this.hp + (2 / 60));
+            }
+        }
+
+        this.x = Utils.clamp(this.x, this.radius, WORLD_W - this.radius);
+        this.y = Utils.clamp(this.y, this.radius, WORLD_H - this.radius);
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (input.checkAction()) {
+            this.performAction(world);
+        }
+    }
+
+    takeDamage(amount, world) {
+        this.hp -= amount;
+        world.addParticle(new Particle(this.x, this.y - 20, 'damage', amount));
+        if (this.hp <= 0 && !this.isDead) {
+            this.isDead = true;
+            this.hp = 0;
+            window.handlePlayerDeath(); 
+        }
+    }
+
+    performAction(world) {
+        let interacting = false;
+        for (let npc of world.npcs) {
+            if (Utils.getDist(this.x, this.y, npc.x, npc.y) < 80) {
+                npc.interact(this, world);
+                interacting = true;
+                break;
+            }
+        }
+        if (interacting) return;
+        if (this.attackCooldown <= 0) {
+            this.attackCooldown = 20;
+            world.addParticle(new Particle(this.x, this.y, 'dust'));
+            AudioHelper.play('sword');
+            
+            let hit = false;
+            world.enemies.forEach(e => {
+                if (!e.isDead && Utils.getDist(this.x, this.y, e.x, e.y) < this.attackRange + e.radius) {
+                    let dmg = Utils.randomInt(8, 15) + (this.level * 2) + this.damageBonus;
+                    e.takeDamage(dmg, world, this);
+                    hit = true;
+                }
+            });
+            if(hit) AudioHelper.play('hit');
+            
+            world.visualEffects.push({type: 'swing', x: this.x, y: this.y, angle: this.facing, life: 10, range: this.attackRange});
+        }
+    }
+
+    gainXp(amount) {
+        this.xp += amount;
+        if (this.xp >= this.maxXp) {
+            this.level++;
+            this.xp -= this.maxXp;
+            this.maxXp = Math.floor(this.maxXp * 1.5);
+            this.maxHp += 20;
+            this.hp = this.maxHp;
+            this.saveData();
+        }
+    }
+
+    draw(ctx, camX, camY) {
+        if (this.isDead) return;
+        this.drawShadow(ctx, camX, camY);
+        
+        ctx.fillStyle = this.useSkin ? COLORS.playerSkin : COLORS.player;
+        ctx.beginPath();
+        ctx.arc(this.x - camX, this.y - camY, this.radius, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        let eyeX = this.x + Math.cos(this.facing) * 8 - camX;
+        let eyeY = this.y + Math.sin(this.facing) * 8 - camY;
+        ctx.beginPath();
+        ctx.arc(eyeX, eyeY, 4, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Orb extends Entity {
+    constructor(x, y) {
+        super(x, y, 10, 0);
+    }
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = '#00ffff';
+        ctx.beginPath();
+        ctx.arc(this.x - camX, this.y + Math.sin(Date.now()/200)*5 - camY, this.radius, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Enemy extends Entity {
+    constructor(x, y, playerLevel) {
+        super(x, y, 18, 2);
+        let typeChance = Math.random();
+        if (typeChance < 0.2) {
+            this.type = 'hard';
+            this.color = COLORS.enemyHard;
+            this.baseHp = 50;
+            this.baseDmg = 15;
+            this.speed = 2.5;
+        } else if (typeChance < 0.35) {
+            this.type = 'aggressive';
+            this.color = COLORS.enemyAgressive;
+            this.baseHp = 35;
+            this.baseDmg = 20;
+            this.speed = 3.5;
+        } else {
+            this.type = 'normal';
+            this.color = COLORS.enemyNormal;
+            this.baseHp = 30;
+            this.baseDmg = 10;
+            this.speed = 2;
+        }
+
+        this.hp = this.baseHp + (playerLevel * 5);
+        this.maxHp = this.hp;
+        this.damage = this.baseDmg + (playerLevel * 2);
+
+        this.state = 'idle';
+        this.patrolCenter = {x, y};
+        this.wanderAngle = 0;
+        this.attackCD = 0;
+    }
+
+    takeDamage(amount, world, player) {
+        this.hp -= amount;
+        world.addParticle(new Particle(this.x, this.y - 20, 'damage', amount));
+        
+        if (this.type === 'aggressive' && Math.random() < 0.3) {
+            if (Utils.getDist(this.x, this.y, player.x, player.y) < 60) {
+                player.takeDamage(Math.floor(this.damage * 0.5), world);
+                world.addParticle(new Particle(this.x, this.y, 'dust', 'Counter!'));
+            }
+        }
+
+        let angle = Math.atan2(this.y - player.y, this.x - player.x);
+        this.x += Math.cos(angle) * 30;
+        this.y += Math.sin(angle) * 30;
+        if (this.hp <= 0) {
+            this.isDead = true;
+            player.gainXp(this.type === 'normal' ? 10 : 20);
+            
+            let coinDrop = Utils.randomInt(2, 5);
+            player.coins += coinDrop;
+            world.addParticle(new Particle(this.x, this.y, 'heal', `+${coinDrop} Coin`));
+            player.saveData();
+
+            world.checkQuestCondition('kill', this.type);
+        }
+    }
+
+    update(player, world) {
+        if (this.attackCD > 0) this.attackCD--;
+        let dist = Utils.getDist(this.x, this.y, player.x, player.y);
+        
+        if (dist < 250 && !player.isDead) {
+            this.state = 'chase';
+        } else if (dist > 400 || player.isDead) {
+            this.state = 'idle';
+        }
+
+        if (this.state === 'chase') {
+            let angle = Math.atan2(player.y - this.y, player.x - this.x);
+            this.x += Math.cos(angle) * this.speed;
+            this.y += Math.sin(angle) * this.speed;
+            if (dist < 30 && this.attackCD <= 0) {
+                player.takeDamage(this.damage, world);
+                this.attackCD = 60;
+                
+                if (this.type === 'hard') {
+                    world.visualEffects.push({type: 'aoe', x: this.x, y: this.y, radius: 40, life: 10});
+                    if (dist < 40) player.takeDamage(Math.floor(this.damage*0.5), world);
+                }
+            }
+        } else {
+            this.wanderAngle += Utils.random(-0.1, 0.1);
+            this.x += Math.cos(this.wanderAngle) * 0.5;
+            this.y += Math.sin(this.wanderAngle) * 0.5;
+            if (Utils.getDist(this.x, this.y, this.patrolCenter.x, this.patrolCenter.y) > 100) {
+                this.wanderAngle = Math.atan2(this.patrolCenter.y - this.y, this.patrolCenter.x - this.x);
+            }
+        }
+    }
+
+    draw(ctx, camX, camY) {
+        this.drawShadow(ctx, camX, camY);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x - camX, this.y - camY, this.radius, Math.PI, 0);
+        ctx.bezierCurveTo(
+            this.x + this.radius - camX, this.y + this.radius - camY,
+            this.x - this.radius - camX, this.y + this.radius - camY,
+            this.x - this.radius - camX, this.y - camY
+        );
+        ctx.fill();
+        
+        ctx.fillStyle = 'red';
+        ctx.fillRect(this.x - 15 - camX, this.y - 25 - camY, 30, 4);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(this.x - 15 - camX, this.y - 25 - camY, 30 * (this.hp/this.maxHp), 4);
+    }
+}
+
+class NPC extends Entity {
+    constructor(x, y, npcType) {
+        super(x, y, 16, 0);
+        this.npcType = npcType; 
+        this.name = npcType === 'quest' ?
+        "Quest Master" : (npcType === 'shop' ? "Merchant" : "Gacha Guru");
+    }
+
+    interact(player, world) {
+        if (this.npcType === 'quest') {
+            world.questManager.interactNPC(player, world.ui);
+        } else if (this.npcType === 'shop') {
+            world.ui.showDialog("Halo! Mau beli perlengkapan?");
+            setTimeout(() => window.openShopUI(player), 500);
+        } else if (this.npcType === 'gacha') {
+            world.ui.showDialog("Gacha Coin? 50 Koin 1x Tarik!");
+            if (player.coins >= 50) {
+                player.coins -= 50;
+                let chance = Math.random();
+                let reward = 0;
+                if (chance < 0.4) {
+                    world.ui.showDialog("Zonk! Kamu tidak dapat apa-apa.");
+                } else if (chance < 0.8) {
+                    reward = Utils.randomInt(10, 40);
+                    world.ui.showDialog(`Lumayan! Dapat ${reward} Koin.`);
+                } else {
+                    reward = Utils.randomInt(100, 200);
+                    world.ui.showDialog(`JACKPOT! Dapat ${reward} Koin!`);
+                }
+                player.coins += reward;
+                player.saveData();
+            } else {
+                world.ui.showDialog("Koin tidak cukup! Butuh 50.");
+            }
+        }
+    }
+
+    draw(ctx, camX, camY) {
+        this.drawShadow(ctx, camX, camY);
+        if (this.npcType === 'quest') ctx.fillStyle = COLORS.npcQuest;
+        else if (this.npcType === 'shop') ctx.fillStyle = COLORS.npcShop;
+        else ctx.fillStyle = COLORS.npcGacha;
+        
+        ctx.beginPath();
+        ctx.rect(this.x - 12 - camX, this.y - 12 - camY, 24, 24);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 20px sans-serif';
+        let marker = this.npcType === 'quest' ? '!'
+        : (this.npcType === 'shop' ? '$' : '?');
+        
+        if (this.npcType === 'quest' && window.currentWorld.questManager.state === 'completed') {
+            ctx.fillStyle = '#00ff00';
+            marker = '?';
+        }
+        
+        ctx.fillText(marker, this.x - 6 - camX, this.y - 20 - camY);
+    }
+}
+
+class StaticObject {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.scale = Utils.random(0.8, 1.2);
+    }
+    draw(ctx, camX, camY) {
+        if (this.type === 'tree') {
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(this.x - camX, this.y + 10 - camY, 25 * this.scale, 10 * this.scale, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = COLORS.treeTrunk;
+            ctx.fillRect(this.x - 8 * this.scale - camX, this.y - 20 * this.scale - camY, 16 * this.scale, 30 * this.scale);
+            ctx.fillStyle = COLORS.treeLeaves;
+            ctx.beginPath();
+            ctx.arc(this.x - camX, this.y - 40 * this.scale - camY, 25 * this.scale, 0, Math.PI*2);
+            ctx.arc(this.x - camX, this.y - 60 * this.scale - camY, 20 * this.scale, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#4caf50';
+            ctx.beginPath();
+            ctx.arc(this.x - 5 - camX, this.y - 65 * this.scale - camY, 10 * this.scale, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+}
+
+/**
+ * ==========================================
+ * QUEST MANAGER (Fitur 1 & 2)
+ * ==========================================
+ */
+class QuestManager {
+    constructor() {
+        this.state = 'none'; 
+        this.type = ''; 
+        this.targetType = ''; 
+        this.required = 0;
+        this.progress = 0;
+        this.reward = 0;
+        this.questsDone = 0;
+        this.cooldownFrames = 0;
+    }
+
+    generateQuest() {
+        let rand = Math.random();
+        this.progress = 0;
+        if (rand < 0.4) {
+            this.type = 'kill';
+            this.targetType = 'normal';
+            this.required = Utils.randomInt(3, 8);
+            this.reward = this.required * 10;
+        } else if (rand < 0.7) {
+            this.type = 'kill';
+            this.targetType = Math.random() < 0.5 ? 'hard' : 'aggressive';
+            this.required = Utils.randomInt(2, 5);
+            this.reward = this.required * 25;
+        } else {
+            this.type = 'orb';
+            this.required = Utils.randomInt(3, 9);
+            this.reward = this.required * 15;
+            window.currentWorld.spawnOrbs(this.required + 2);
+        }
+        this.state = 'active';
+    }
+
+    interactNPC(player, ui) {
+        if (this.state === 'none') {
+            this.generateQuest();
+            let msg = this.type === 'kill' ? 
+            `Tolong bunuh ${this.required} musuh tipe ${this.targetType}!` : `Kumpulkan ${this.required} Orb misterius di area ini!`;
+            ui.showDialog(msg);
+        } else if (this.state === 'active') {
+            ui.showDialog(`Kamu belum selesai! Lanjutkan quest: ${this.progress}/${this.required}`);
+        } else if (this.state === 'completed') {
+            player.coins += this.reward;
+            player.saveData();
+            ui.showDialog(`Kerja bagus! Ini imbalan ${this.reward} Koin.\nLanjutkan perjuanganmu!`);
+            this.questsDone++;
+            if (this.questsDone >= Utils.randomInt(5, 6)) {
+                this.state = 'cooldown';
+                this.cooldownFrames = 60 * 60; 
+                this.questsDone = 0;
+            } else {
+                this.state = 'none';
+            }
+        } else if (this.state === 'cooldown') {
+            ui.showDialog("Aku butuh waktu untuk mencari informasi baru.\nKembalilah beberapa saat lagi.");
+        }
+    }
+
+    update() {
+        if (this.state === 'active' && this.progress >= this.required) {
+            this.state = 'completed';
+        }
+        if (this.state === 'cooldown') {
+            this.cooldownFrames--;
+            if (this.cooldownFrames <= 0) this.state = 'none';
+        }
+    }
+}
+
+/**
+ * ==========================================
+ * GAME WORLD & RENDERER
+ * ==========================================
+ */
+class World {
+    constructor() {
+        this.camera = new Camera(window.innerWidth, window.innerHeight);
+        this.player = new Player(WORLD_W/2, WORLD_H/2);
+        this.player.loadData();
+        this.enemies = [];
+        this.npcs = [];
+        this.objects = [];
+        this.particles = [];
+        this.decor = [];
+        this.visualEffects = [];
+        this.orbs = [];
+        this.ui = null;
+        this.questManager = new QuestManager();
+        this.noTargetTimer = 0;
+        this.generateWorld();
+    }
+
+    generateWorld() {
+        for (let i = 0; i < 3000; i++) {
+            this.decor.push({
+                x: Utils.random(0, WORLD_W),
+                y: Utils.random(0, WORLD_H),
+                size: Utils.random(2, 5),
+                color: COLORS.grass[Math.floor(Math.random() * COLORS.grass.length)]
+            });
+        }
+        for (let i = 0; i < 400; i++) {
+            let x = Utils.random(100, WORLD_W-100);
+            let y = Utils.random(100, WORLD_H-100);
+            if (Utils.getDist(x, y, this.player.x, this.player.y) > 200) {
+                this.objects.push(new StaticObject(x, y, 'tree'));
+            }
+        }
+        for (let i = 0; i < 50; i++) {
+            this.spawnEnemy();
+        }
+        this.npcs.push(new NPC(this.player.x + 100, this.player.y - 100, 'quest'));
+        this.npcs.push(new NPC(this.player.x - 100, this.player.y - 100, 'shop'));
+        this.npcs.push(new NPC(this.player.x + 100, this.player.y + 100, 'gacha'));
+    }
+
+    spawnEnemy() {
+        let x = Utils.random(100, WORLD_W-100);
+        let y = Utils.random(100, WORLD_H-100);
+        if (Utils.getDist(x, y, this.player.x, this.player.y) > 400) {
+            this.enemies.push(new Enemy(x, y, this.player.level));
+        }
+    }
+
+    spawnOrbs(count) {
+        for(let i=0; i<count; i++){
+            let x = Utils.random(100, WORLD_W-100);
+            let y = Utils.random(100, WORLD_H-100);
+            this.orbs.push(new Orb(x, y));
+        }
+    }
+
+    checkQuestCondition(type, detail) {
+        if (this.questManager.state === 'active' && this.questManager.type === type) {
+            if (type === 'kill' && this.questManager.targetType === detail) {
+                this.questManager.progress++;
+            }
+            if (type === 'orb') {
+                this.questManager.progress++;
+            }
+        }
+    }
+
+    addParticle(p) {
+        this.particles.push(p);
+    }
+
+    update(input) {
+        this.player.update(input, this);
+        this.camera.follow(this.player);
+
+        this.enemies = this.enemies.filter(e => !e.isDead);
+        while (this.enemies.length < 50) {
+            this.spawnEnemy();
+        }
+        this.enemies.forEach(e => e.update(this.player, this));
+
+        for (let i = this.orbs.length - 1; i >= 0; i--) {
+            let o = this.orbs[i];
+            if (Utils.getDist(this.player.x, this.player.y, o.x, o.y) < 30) {
+                this.orbs.splice(i, 1);
+                AudioHelper.play('orb');
+                this.addParticle(new Particle(o.x, o.y, 'heal', 'Orb!'));
+                this.checkQuestCondition('orb');
+            }
+        }
+
+        this.particles.forEach(p => p.update());
+        this.particles = this.particles.filter(p => p.life > 0);
+
+        this.visualEffects.forEach(e => e.life--);
+        this.visualEffects = this.visualEffects.filter(e => e.life > 0);
+        
+        this.questManager.update();
+        
+        this.noTargetTimer++;
+    }
+
+    draw(ctx) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        const camX = this.camera.x;
+        const camY = this.camera.y;
+
+        ctx.fillStyle = COLORS.ground;
+        ctx.fillRect(-camX, -camY, WORLD_W, WORLD_H);
+
+        this.decor.forEach(d => {
+            if (d.x > camX - 10 && d.x < camX + ctx.canvas.width + 10 &&
+                d.y > camY - 10 && d.y < camY + ctx.canvas.height + 10) {
+                ctx.fillStyle = d.color;
+                ctx.fillRect(d.x - camX, d.y - camY, d.size, d.size);
+            }
+        });
+
+        this.objects.forEach(o => o.draw(ctx, camX, camY));
+        this.orbs.forEach(o => o.draw(ctx, camX, camY));
+        this.npcs.forEach(n => n.draw(ctx, camX, camY));
+        this.enemies.forEach(e => e.draw(ctx, camX, camY));
+        this.player.draw(ctx, camX, camY);
+        this.particles.forEach(p => p.draw(ctx, camX, camY));
+
+        this.visualEffects.forEach(e => {
+            ctx.globalAlpha = e.life / 10;
+            if (e.type === 'swing') {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(e.x - camX, e.y - camY, e.range, e.angle - 0.5, e.angle + 0.5);
+                ctx.stroke();
+            } else if (e.type === 'aoe') {
+                ctx.fillStyle = 'rgba(231, 76, 60, 0.5)';
+                ctx.beginPath();
+                ctx.arc(e.x - camX, e.y - camY, e.radius, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        });
+
+        this.drawUIElements(ctx);
+    }
+
+    drawUIElements(ctx) {
+        if (this.noTargetTimer % 1200 < 300) { 
+            let target = null;
+            if (this.questManager.state === 'active') {
+                if (this.questManager.type === 'kill') {
+                    target = this.enemies.find(e => e.type === this.questManager.targetType);
+                } else {
+                    target = this.orbs[0];
+                }
+            } else if (this.questManager.state === 'completed') {
+                target = this.npcs.find(n => n.npcType === 'quest');
+            }
+            
+            if (target) {
+                let angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+                ctx.save();
+                ctx.translate(ctx.canvas.width/2 + Math.cos(angle)*100, ctx.canvas.height/2 + Math.sin(angle)*100);
+                ctx.rotate(angle);
+                ctx.fillStyle = '#f1c40f';
+                ctx.beginPath();
+                ctx.moveTo(15, 0); ctx.lineTo(-10, -10); ctx.lineTo(-10, 10); ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+    }
+}
+
+/**
+ * ==========================================
+ * GAME ENGINE CORE
+ * ==========================================
+ */
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.resize();
+        this.input = new InputHandler();
+        this.world = new World();
+        this.world.ui = this;
+        this.lastTime = 0;
+        this.dialog = { text: "", life: 0 };
+        this.isStarted = false;
+
+        window.currentWorld = this.world;
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        if (this.world) {
+            this.world.camera.width = this.canvas.width;
+            this.world.camera.height = this.canvas.height;
+        }
+    }
+
+    showDialog(text) {
+        this.dialog.text = text;
+        this.dialog.life = 180; 
+    }
+
+    start() {
+        this.isStarted = true;
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('loader').style.display = 'flex';
+        AudioHelper.startBGM();
+        
+        setTimeout(() => {
+            document.getElementById('loader').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('loader').style.display = 'none';
+                requestAnimationFrame((t) => this.loop(t));
+            }, 500);
+        }, 1000);
+    }
+
+    loop(timestamp) {
+        if (!this.isStarted) return;
+        const dt = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+
+        this.world.update(this.input);
+        this.world.draw(this.ctx);
+        this.drawHUD();
+
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    drawHUD() {
+        const ctx = this.ctx;
+        const p = this.world.player;
+
+        ctx.fillStyle = COLORS.uiBg;
+        ctx.fillRect(20, 20, 250, 100);
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(20, 20, 250, 100);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(`Lv. ${p.level} Knight`, 35, 45);
+        ctx.fillText(`Koin: ${Math.floor(p.coins)}`, 180, 45);
+
+        this.drawBar(35, 60, 220, 12, p.hp / p.maxHp, '#e74c3c');
+        this.drawBar(35, 80, 220, 8, p.xp / p.maxXp, '#3498db');
+
+        if (this.dialog.life > 0) {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(window.innerWidth/2 - 200, 50, 400, 60);
+            ctx.strokeStyle = '#f1c40f';
+            ctx.strokeRect(window.innerWidth/2 - 200, 50, 400, 60);
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.dialog.text, window.innerWidth/2, 85);
+            ctx.textAlign = 'left';
+            this.dialog.life--;
+        }
+
+        if (this.input.isMobile) {
+            const joy = this.input.joystick;
+            if (joy.active) {
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(joy.originX, joy.originY, 50, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(joy.x, joy.y, 25, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+            const btn = this.input.actionBtn;
+            ctx.fillStyle = btn.active ? '#f1c40f' : 'rgba(255,255,255,0.3)';
+            ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.textAlign = 'center';
+            ctx.fillText("ATTACK", btn.x, btn.y + 7);
+            ctx.textAlign = 'left';
+        }
+
+        if (this.world.questManager.state !== 'none') {
+            ctx.fillStyle = COLORS.uiBg;
+            ctx.fillRect(window.innerWidth - 220, 20, 200, 50);
+            ctx.fillStyle = '#f1c40f';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText("QUEST AKTIF:", window.innerWidth - 210, 40);
+            ctx.fillStyle = '#fff';
+            let q = this.world.questManager;
+            let text = q.state === 'completed' ? "Selesai! Lapor NPC." : `${q.progress} / ${q.required}`;
+            ctx.fillText(text, window.innerWidth - 210, 60);
+        }
+    }
+
+    drawBar(x, y, w, h, ratio, color) {
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(x, y, w, h);
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(x, y, w * ratio, h);
+    }
+}
+
+/**
+ * ==========================================
+ * HTML INTERFACE HOOKS
+ * ==========================================
+ */
+const game = new Game();
+
+window.onload = () => {
+    let timeLeft = 5;
+    const timerElem = document.getElementById('timerText');
+    
+    const countdown = setInterval(() => {
+        timeLeft--;
+        timerElem.innerText = timeLeft;
+        if(timeLeft <= 0) {
+            clearInterval(countdown);
+            game.start();
+        }
+    }, 1000);
+};
+
+window.handlePlayerDeath = () => {
+    const ds = document.getElementById('deathScreen');
+    ds.style.display = 'flex';
+    let count = 60;
+    const timer = document.getElementById('respawnTimer');
+    const costElem = document.getElementById('respawnCost');
+    const skipBtn = document.getElementById('skipRespawnBtn');
+    
+    let cost = Math.floor(game.world.player.level * 10);
+    costElem.innerText = cost;
+
+    const interval = setInterval(() => {
+        count--;
+        timer.innerText = count;
+        if (count <= 0) {
+            clearInterval(interval);
+            location.reload(); 
+        }
+    }, 1000);
+
+    skipBtn.onclick = () => {
+        if (game.world.player.coins >= cost) {
+            game.world.player.coins -= cost;
+            game.world.player.hp = game.world.player.maxHp;
+            game.world.player.isDead = false;
+            game.world.player.saveData();
+            clearInterval(interval);
+            ds.style.display = 'none';
+        } else {
+            alert("Koin tidak cukup!");
+        }
+    };
+};
+
+window.openShopUI = (player) => {
+    document.getElementById('shopUI').style.display = 'flex';
+    document.getElementById('shopCoins').innerText = Math.floor(player.coins);
+    
+    if(player.ownsSkin) {
+        document.getElementById('btnSkin').innerText = 'Owned';
+        document.getElementById('btnSkin').disabled = true;
+        player.useSkin = true; 
+    }
+    if(player.ownsTrail) {
+        document.getElementById('btnTrail').innerText = 'Owned';
+        document.getElementById('btnTrail').disabled = true;
+        player.useTrail = true;
+    }
+};
+
+window.closeShopUI = () => {
+    document.getElementById('shopUI').style.display = 'none';
+};
+
+window.buyItem = (type, cost) => {
+    let p = window.currentWorld.player;
+    if (p.coins >= cost) {
+        p.coins -= cost;
+        if (type === 'damage') p.damageBonus += 5;
+        if (type === 'range') p.attackRange += 10;
+        if (type === 'hpfull') p.hp = p.maxHp;
+        if (type === 'maxhp') { p.maxHp += 20; p.hp += 20; }
+        if (type === 'skin') { p.ownsSkin = true; p.useSkin = true; document.getElementById('btnSkin').innerText = 'Owned'; document.getElementById('btnSkin').disabled = true; }
+        if (type === 'trail') { p.ownsTrail = true; p.useTrail = true; document.getElementById('btnTrail').innerText = 'Owned'; document.getElementById('btnTrail').disabled = true; }
+        
+        p.saveData();
+        document.getElementById('shopCoins').innerText = Math.floor(p.coins);
+    } else {
+        alert("Koin tidak cukup!");
+    }
+};
+</script>
+</body>
+</html>
