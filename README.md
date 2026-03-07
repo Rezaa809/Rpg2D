@@ -17,9 +17,7 @@
 
 Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 
-### **[👉 KLIK DISINI UNTUK DOWNLOAD APK 👈](https://github.com/rhezakahhh/rpg2d/raw/utama/apk%20v1%20(tanpa%20suara)/rpg2d.apk)**
-
-> **Catatan:** Ganti `rpg2d.apk` pada link di atas dengan nama file asli yang ada di dalam folder tersebut jika berbeda.
+### **[👉 KLIK DISINI UNTUK DOWNLOAD APK 👈](https://github.com/Rezaa809/rpg2d)**
 
 **Cara Instalasi:**
 1. Klik link download di atas.
@@ -36,14 +34,13 @@ Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 
 ---
 
-## 📸 Cuplikan Game (Screenshots)
+## 📸 Cuplikan Game
 
 <p align="center">
   <img src="tangkapan layar/Picture1.png" width="400" alt="Gameplay 1">
   <img src="tangkapan layar/Picture2.png" width="400" alt="Gameplay 2">
 </p>
 
-> *Pastikan nama file di folder `tangkapan layar` sama dengan nama di atas (Picture1.png, dll).*
 
 ---
 
@@ -53,7 +50,7 @@ Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 | :--- | :--- |
 | **Bergerak** | Virtual Joystick / Tap Screen |
 | **Serang/Aksi** | Tombol Aksi di Layar |
-| **Menu** | Ikon Menu di Pojok |
+| **Stats** | Ikon Stats di Pojok |
 
 ---
 
@@ -61,4 +58,9 @@ Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 
 1. Clone repositori:
    ```bash
-   git clone [https://github.com/rhezakahhh/rpg2d.git](https://github.com/rhezakahhh/rpg2d.git)
+   git clone [https://github.com/Rezaa809/rpg2d.git](https://github.com/Rezaa809/rpg2d.git)
+
+
+
+
+
