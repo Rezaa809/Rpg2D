@@ -17,7 +17,7 @@
 
 Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 
-### **[👉 KLIK DISINI 👈](https://github.com/Rezaa809/rpg2d/releases/tag/v1.1.0)**
+### **[👉 KLIK DISINI 👈](https://github.com/Rezaa809/Rpg2D/releases/tag/v1.1.0)**
 
 **Cara Instalasi:**
 1. Klik link download di atas.
@@ -58,7 +58,7 @@ Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 
 1. Clone repositori:
    ```bash
-   git clone [https://github.com/Rezaa809/rpg2d.git](https://github.com/Rezaa809/rpg2d.git)
+   git clone [https://github.com/Rezaa809/Rpg2D.git](https://github.com/Rezaa809/Rpg2D.git)
 
 
 
