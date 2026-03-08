@@ -37,8 +37,8 @@ Kamu bisa langsung mendownload file APK-nya dari repositori ini:
 ## 📸 Cuplikan Game
 
 <p align="center">
-  <img src="tangkapan layar/Picture1.png" width="400" alt="Gameplay 1">
-  <img src="tangkapan layar/Picture2.png" width="400" alt="Gameplay 2">
+  <img src="scrennshots/Picture1.png" width="400" alt="Gameplay 1">
+  <img src="scrennshots/Picture2.png" width="400" alt="Gameplay 2">
 </p>
 
 
